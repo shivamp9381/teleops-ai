@@ -1,0 +1,111 @@
+# ============================================================
+# TeleOps AI - Application Configuration
+# Java 21 | Spring Boot 3.2.5 | MongoDB | Redis | Groq AI
+# ============================================================
+
+spring:
+  application:
+    name: teleops-ai
+
+  # ----------------------------------------------------------
+  # MongoDB
+  # ----------------------------------------------------------
+  data:
+    mongodb:
+      uri:
+
+  # ----------------------------------------------------------
+  # Redis
+  # ----------------------------------------------------------
+  redis:
+    host: ${REDIS_HOST:localhost}
+    port: ${REDIS_PORT:6379}
+    password: ${REDIS_PASSWORD:}
+    ssl:
+      enabled: ${REDIS_SSL:false}
+
+
+    # Cache configuration
+    cache:
+      type: redis
+      redis:
+        time-to-live: 60000     # Default 60s in milliseconds
+        key-prefix: "teleops:"  # Prefix all keys to avoid collision
+        use-key-prefix: true
+        cache-null-values: false  # Never cache null value
+
+  # ----------------------------------------------------------
+  # Jackson - JSON settings
+  # ----------------------------------------------------------
+  jackson:
+    serialization:
+      write-dates-as-timestamps: false
+    default-property-inclusion: non_null
+    time-zone: UTC
+
+# ============================================================
+# Server
+# ============================================================
+server:
+  port: ${PORT:8080}
+
+# ============================================================
+# JWT Configuration
+# ============================================================
+application:
+  security:
+    jwt:
+      secret-key: ${JWT_SECRET:404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970}
+      access-token-expiration: 900000
+      refresh-token-expiration: 604800000
+
+  # ----------------------------------------------------------
+  # Groq AI
+  # ----------------------------------------------------------
+  groq:
+    api-key:
+    base-url: https://api.groq.com/openai/v1
+    model: ${GROQ_MODEL:llama-3.3-70b-versatile}
+    max-tokens: 2048
+    timeout: 30
+
+# ============================================================
+# Actuator
+# ============================================================
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: always
+  health:
+    redis:
+      enabled: true
+  metrics:
+    export:
+      prometheus:
+        enabled: true
+
+# ============================================================
+# Swagger
+# ============================================================
+springdoc:
+  api-docs:
+    path: /api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+
+# ============================================================
+# Logging
+# ============================================================
+logging:
+  level:
+    com.teleops: DEBUG
+    org.springframework.security: INFO
+    org.springframework.data.mongodb: INFO
+    org.springframework.cache: TRACE    # Shows cache hits/misses
+    org.springframework.data.redis: INFO
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"

@@ -1,0 +1,129 @@
+# ============================================================
+# TeleOps AI — Docker Compose
+# Runs: Spring Boot App + MongoDB + Redis
+#
+# Usage:
+#   docker-compose up -d         → start everything
+#   docker-compose down          → stop everything
+#   docker-compose logs -f app   → watch app logs
+#   docker-compose ps            → check status
+# ============================================================
+
+version: '3.8'
+
+services:
+
+  # ─────────────────────────────────────────────────────────
+  # MongoDB
+  # ─────────────────────────────────────────────────────────
+  mongodb:
+    image: mongo:7.0
+    container_name: teleops-mongodb
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USER:-admin}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASS:-teleops_pass}
+      MONGO_INITDB_DATABASE: ${MONGO_DB:-teleopsdb}
+    volumes:
+      - mongodb_data:/data/db
+      - ./docker/mongo-init.js:/docker-entrypoint-initdb.d/init.js:ro
+    networks:
+      - teleops-network
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+
+  # ─────────────────────────────────────────────────────────
+  # Redis
+  # ─────────────────────────────────────────────────────────
+  redis:
+    image: redis:7.2-alpine
+    container_name: teleops-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    command: >
+      redis-server
+      --requirepass ${REDIS_PASSWORD:-redis_pass}
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    networks:
+      - teleops-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "--pass",
+             "${REDIS_PASSWORD:-redis_pass}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ─────────────────────────────────────────────────────────
+  # TeleOps AI Spring Boot Application
+  # ─────────────────────────────────────────────────────────
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: teleops-app
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      # Spring profile
+      SPRING_PROFILES_ACTIVE: docker
+
+      # MongoDB connection
+      SPRING_DATA_MONGODB_URI: mongodb://admin:teleops_pass@mongodb:27017/teleopsdb?authSource=admin
+      SPRING_DATA_MONGODB_DATABASE: ${MONGO_DB:-teleopsdb}
+
+      # Redis connection
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: 6379
+      SPRING_DATA_REDIS_PASSWORD: ${REDIS_PASSWORD:-redis_pass}
+
+      # JWT
+      APPLICATION_JWT_SECRET: ${JWT_SECRET:-your_super_secret_jwt_key_at_least_256_bits_long}
+      APPLICATION_JWT_EXPIRATION: ${JWT_EXPIRATION:-86400000}
+
+      # Groq AI API
+      APPLICATION_GROQ_API_KEY: ${GROQ_API_KEY}
+
+      # JVM
+      JAVA_OPTS: "-Xmx512m -Xms256m"
+
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - teleops-network
+    healthcheck:
+      test: ["CMD", "curl", "-f",
+             "http://localhost:8080/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+# ─────────────────────────────────────────────────────────────
+# Volumes — persist data between container restarts
+# ─────────────────────────────────────────────────────────────
+volumes:
+  mongodb_data:
+    name: teleops_mongodb_data
+  redis_data:
+    name: teleops_redis_data
+
+# ─────────────────────────────────────────────────────────────
+# Network — all containers talk to each other privately
+# ─────────────────────────────────────────────────────────────
+networks:
+  teleops-network:
+    name: teleops_network
+    driver: bridge
